@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ──────────────────────────────────────────
-# 전체 배경 + 스타일
+# 스타일
 # ──────────────────────────────────────────
 st.markdown(f"""
 <style>
@@ -32,11 +32,11 @@ html, body, .stApp {{
 }}
 
 .overlay {{
-    background: rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.62);
     border-radius: 20px;
-    padding: 24px;
+    padding: 24px 28px;
     margin: 0 auto;
-    max-width: 700px;
+    max-width: 780px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }}
 
@@ -46,7 +46,7 @@ html, body, .stApp {{
     font-weight: bold;
     color: #1b5e20;
     letter-spacing: 2px;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
 }}
 
 .board {{
@@ -58,7 +58,7 @@ html, body, .stApp {{
     font-size: 17px;
     font-weight: bold;
     letter-spacing: 4px;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
 }}
 
 .status {{
@@ -68,56 +68,79 @@ html, body, .stApp {{
     margin-bottom: 12px;
 }}
 
-table {{
-    border-collapse: separate;
-    border-spacing: 6px;
+/* 분단 전체 레이아웃 */
+.seating-wrap {{
+    display: flex;
+    justify-content: center;
+    gap: 24px;
     margin: 0 auto;
+}}
+
+/* 분단 박스 */
+.group-box {{
+    background: rgba(255,255,255,0.25);
+    border: 2px solid rgba(100,150,100,0.35);
+    border-radius: 14px;
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}}
+
+.group-label {{
+    text-align: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #2e7d32;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+}}
+
+/* 분단 내 행 (두 자리 나란히) */
+.seat-row {{
+    display: flex;
+    gap: 6px;
+}}
+
+/* 자리 공통 */
+.seat {{
+    width: 76px;
+    height: 50px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }}
 
 .seat-normal {{
     background: rgba(255,255,255,0.93);
     color: #333;
-    font-size: 13px;
-    text-align: center;
-    border-radius: 8px;
-    width: 82px;
-    height: 52px;
     border: 1px solid rgba(200,200,200,0.8);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    vertical-align: middle;
 }}
 
 .seat-fixed {{
     background: rgba(187,222,251,0.95);
     color: #1565c0;
-    font-size: 13px;
     font-weight: bold;
-    text-align: center;
-    border-radius: 8px;
-    width: 82px;
-    height: 52px;
     border: 2px solid #42a5f5;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-    vertical-align: middle;
 }}
 
 .seat-cover {{
     background: linear-gradient(135deg, #ff9800, #f57c00);
     color: white;
-    font-size: 24px;
-    text-align: center;
-    border-radius: 10px;
-    width: 82px;
-    height: 52px;
+    font-size: 22px;
     font-weight: bold;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.2);
     border: 2px solid rgba(255,255,255,0.5);
-    vertical-align: middle;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.2);
 }}
 
 .seat-empty {{
-    width: 82px;
-    height: 52px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }}
 
 .stButton > button {{
@@ -141,9 +164,16 @@ STUDENTS = [
 ]
 
 # ──────────────────────────────────────────
-# 자리 구조 (총 25자리)
+# 자리 구조
+# col1:5행, col2:5행 → 1분단 (10자리)
+# col3:4행, col4:4행 → 2분단 (8자리)
+# col5:4행, col6:3행 → 3분단 (7자리)  총 25자리
 # ──────────────────────────────────────────
 SEAT_STRUCTURE = {1: 5, 2: 5, 3: 4, 4: 4, 5: 4, 6: 3}
+
+# 분단 그룹: (왼쪽열, 오른쪽열)
+GROUPS = [(1, 2), (3, 4), (5, 6)]
+GROUP_NAMES = ["1분단", "2분단", "3분단"]
 
 def generate_all_seats():
     seats = []
@@ -155,12 +185,10 @@ def generate_all_seats():
 ALL_SEATS = generate_all_seats()
 
 # ──────────────────────────────────────────
-# 세션 상태 초기화
+# 세션 상태
 # ──────────────────────────────────────────
 if "seating" not in st.session_state:
     st.session_state.seating = None
-if "cover" not in st.session_state:
-    st.session_state.cover = False
 if "status_text" not in st.session_state:
     st.session_state.status_text = ""
 if "status_color" not in st.session_state:
@@ -184,29 +212,37 @@ def create_seating(fixed={}):
     return result
 
 # ──────────────────────────────────────────
-# 자리 HTML 렌더링
+# 분단별 HTML 렌더링
 # ──────────────────────────────────────────
 def render_seating(seating, cover_all=False):
-    max_row = max(SEAT_STRUCTURE.values())
-    html = '<table>'
-    for row in range(1, max_row + 1):
-        html += '<tr>'
-        for col in range(1, 7):
-            max_r = SEAT_STRUCTURE.get(col, 0)
-            if row > max_r:
-                html += '<td class="seat-empty"></td>'
-                continue
-            seat = (col, row)
-            name = seating.get(seat, "")
-            is_fixed = seat in st.session_state.fixed_seats
-            if cover_all:
-                html += '<td class="seat-cover">🎲</td>'
-            elif is_fixed:
-                html += f'<td class="seat-fixed">📌<br>{name}</td>'
-            else:
-                html += f'<td class="seat-normal">{name}</td>'
-        html += '</tr>'
-    html += '</table>'
+    html = '<div class="seating-wrap">'
+
+    for (lcol, rcol), gname in zip(GROUPS, GROUP_NAMES):
+        max_r = max(SEAT_STRUCTURE[lcol], SEAT_STRUCTURE[rcol])
+        html += f'<div class="group-box">'
+        html += f'<div class="group-label">📎 {gname}</div>'
+
+        for row in range(1, max_r + 1):
+            html += '<div class="seat-row">'
+            for col in [lcol, rcol]:
+                seat = (col, row)
+                has_seat = row <= SEAT_STRUCTURE[col]
+                if not has_seat:
+                    html += '<div class="seat seat-empty"></div>'
+                    continue
+                name = seating.get(seat, "")
+                is_fixed = seat in st.session_state.fixed_seats
+                if cover_all:
+                    html += '<div class="seat seat-cover">🎲</div>'
+                elif is_fixed:
+                    html += f'<div class="seat seat-fixed">📌<br>{name}</div>'
+                else:
+                    html += f'<div class="seat seat-normal">{name}</div>'
+            html += '</div>'  # seat-row
+
+        html += '</div>'  # group-box
+
+    html += '</div>'  # seating-wrap
     return html
 
 # ──────────────────────────────────────────
@@ -247,11 +283,10 @@ btn_col1, btn_col2 = st.columns(2)
 with btn_col1:
     start = st.button("🎲 자리배치 시작!", use_container_width=True, type="primary")
 with btn_col2:
-    reset = st.button("🔄 초기화", use_container_width=True)
+    reset_btn = st.button("🔄 초기화", use_container_width=True)
 
-if reset:
+if reset_btn:
     st.session_state.seating = None
-    st.session_state.cover = False
     st.session_state.status_text = ""
     st.rerun()
 
@@ -278,7 +313,6 @@ if start:
 
     # 최종 공개
     st.session_state.seating = final_seating
-    st.session_state.cover = False
     st.session_state.status_text = "🎉 자리배치 완료!"
     st.session_state.status_color = "#27ae60"
     st.rerun()
@@ -290,10 +324,7 @@ if st.session_state.seating:
         unsafe_allow_html=True
     )
     st.markdown('<div class="board">🖊 칠 판 🖊</div>', unsafe_allow_html=True)
-    st.markdown(
-        render_seating(st.session_state.seating, cover_all=False),
-        unsafe_allow_html=True
-    )
-    st.markdown('<div style="text-align:center;margin-top:10px;font-size:11px;color:#555;">📌 파란색: 고정자리</div>', unsafe_allow_html=True)
+    st.markdown(render_seating(st.session_state.seating, cover_all=False), unsafe_allow_html=True)
+    st.markdown('<div style="text-align:center;margin-top:12px;font-size:11px;color:#555;">📌 파란색: 고정자리</div>', unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
